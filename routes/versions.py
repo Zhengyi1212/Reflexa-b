@@ -61,7 +61,7 @@ async def add_version_node(
         )
 
 # delete_version_node 函数保持不变...
-@router.post("/delete_node", status_code=status.HTTP_200_OK)
+@router.post("/delete_version", status_code=status.HTTP_200_OK)
 async def delete_version_node(
     request: DeleteVersionRequest,
     vector_store: Chroma = Depends(get_vector_store)

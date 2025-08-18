@@ -33,22 +33,9 @@ class MergeRequest(BaseModel):
     code_2: str
     description_2: str
     instruction: str
+    mode: str
 
 # --- ‼️【修改】Schemas for the 'modify' feature ---
 
 # StyleRecommendRequest is no longer needed as the new endpoint takes no arguments.
 # We can safely remove it.
-
-class ApplyStyleRequest(BaseModel):
-    """
-    The request body for applying a style.
-    It now only contains the selected tag.
-    """
-    style_tag: str 
-    
-class ApplyStyleResponse(BaseModel):
-    """
-    The response body after applying a style.
-    It now only contains the resulting code.
-    """
-    code: str

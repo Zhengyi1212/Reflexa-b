@@ -10,6 +10,9 @@ from .prompt import (
     VAGUE_EXPLAINABLE_PROMPT,
     VAGUE_EXPLORATIVE_PROMPT,
     VAGUE_TRANSFORMATIVE_PROMPT,
+    DEEP_EXPLAINABLE_PROMPT,
+    DEEP_TRANSFORMATIVE_PROMPT,
+    DEEP_EXPLORATIVE_PROMPT
     
 
 )
@@ -34,13 +37,13 @@ DEEP_REFLECTION_TEMPLATES: Dict[str, Dict[str, str]] = {
 # --- 模板库 (深度反思，保持不变) ---
 DEEP_REFLECTION: Dict[str, Dict[str, str]] = {
     "explainable": {
-        "动机说明": "💬 你提到这个 {topic}时，背后想表达的核心感受或体验是什么？这个想法与你以往的创作、经历或目标有什么联系？",
-        "视觉目标澄清": "💬 你实现 {topic} 这个功能时，想要呈现的视觉体验或交互感受是什么？它与整个项目的创意目标之间有何关联？",
-        "细节决策说明": "💬 你做出这个 {topic} 这个细节调整时，背后的设计动机或想营造的感受是什么？这个细节是否强化了你的表达？"
+        "动机说明": "💬 你提到{topic}时，背后想表达的核心感受或体验是什么？这个想法与你以往的创作、经历或目标有什么联系？",
+        "视觉目标澄清": "💬 你实现{topic}这个功能时，想要呈现的视觉体验或交互感受是什么？它与整个项目的创意目标之间有何关联？",
+        "细节决策说明": "💬 你做出{topic}这个细节调整时，背后的设计动机或想营造的感受是什么？这个细节是否强化了你的表达？"
     },
     "explorative": {
-        "概念联系探索": "💬 你的灵感 {topic} 中有没有哪些元素可以结合起来，产生新的想象或叙事线索？",
-        "模块体验关系": "💬 你能否思考一下当前的 {topic} 这几个功能模块，它们之间是否能更协调地服务于整体的视觉叙事或交互体验？",
+        "概念联系探索": "💬 你的灵感{topic}中有没有哪些元素可以结合起来，产生新的想象或叙事线索？",
+        "模块体验关系": "💬 你能否思考一下当前的{topic} 几个功能模块，它们之间是否能更协调地服务于整体的视觉叙事或交互体验？",
         "视觉情感一致性": "💬 在你的作品中，{topic} 这些视觉元素之间是否保持了统一的风格和情绪？有没有可以更好融合它们的方式？"
     },
     "transformative": {
@@ -111,30 +114,70 @@ USER_PROMPT_TEMPLATE = """
 
 # --- 明确意图响应生成器 (保持不变) ---
 async def generate_deep_reflection_response(
-    mode: str, 
-    category: str, 
-    history,
-    memory,
+    user_question: str,
+   
+    mode: str,
     llm: AzureChatOpenAI,
-    
-) -> str:
+    history ,
+    memory 
+) -> Dict[str, str]:
     """
-    为明确意图场景生成模板化的深度反思问题。
+    为深度反思的“模糊意图”场景生成一个结构化的四段式响应。
+    它会根据当前模式选择合适的思维链Prompt，动态注入反思模板，并一次性生成所有内容。
     """
-    template = DEEP_REFLECTION.get(mode, {}).get(category)
-    if not template:
-        return "抱歉，我暂时没有找到合适的反思角度，我们可以换个话题吗？"
+    # 1. 根据模式选择对应的System Prompt模板
+    PROMPT_MAPPING = {
+        "explainable": DEEP_EXPLAINABLE_PROMPT,
+        "explorative": DEEP_EXPLORATIVE_PROMPT,
+        "transformative": DEEP_TRANSFORMATIVE_PROMPT,
+    }
+    system_prompt_template = PROMPT_MAPPING.get(mode)
+    if not system_prompt_template:
+        # 提供一个健壮的错误处理
+        raise ValueError(f"无效的反思模式: '{mode}'。无法找到对应的Prompt。")
 
-    topic_extraction_prompt = ChatPromptTemplate.from_template(TOPIC_EXTRACTION_PROMPT_TEMPLATE)
-    topic_chain = topic_extraction_prompt | llm | StrOutputParser()
+    # 2. 根据模式获取对应的反思问题模板库
+    templates_for_mode = DEEP_REFLECTION_TEMPLATES.get(mode, {})
+    # 将模板格式化为字符串，注入到System Prompt中
+    formatted_templates = "\n".join([f"- {key}: \"{value}\"" for key, value in templates_for_mode.items()])
+
+    # 3. 定义Human Message，包含用户的模糊想法和当前代码
+    human_prompt = """
     
-    topic = await topic_chain.ainvoke({"history":history,
-                                       "memory":memory
-                                       })
-    topic = topic.strip().replace('"', '')
-    print(topic)
-    final_question = template.format(topic=topic)
-    return final_question
+    {user_question}
+    *** 当前代码与描述 ***
+    这是我们目前正在讨论版本的完整代码。
+   
+    我们对话的背景信息：
+    *** 相关的历史版本（记忆） ***
+    基于我们之前的探索，这里是一些过去代码版本的摘要，你可能会觉得有用。请使用这些信息来理解项目的演变和过去的想法。
+    {memory}
+
+    *** 当前对话（短期历史） ***
+    这是我们在用户最新提问之前的即时对话历史。
+    {history}
+
+    *** 你的任务 ***
+    基于以上所有信息（历史记忆、近期对话以及当前代码），继续对话回答我的问题。
+    """
+    # 4. 组装完整的Chat Prompt
+    chat_prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template(system_prompt_template),
+        HumanMessagePromptTemplate.from_template(human_prompt)
+    ])
+
+    # 5. 创建并调用LangChain链
+    chain = chat_prompt | llm | JsonOutputParser()
+
+    response = await chain.ainvoke({
+        "reflection_templates": formatted_templates,
+        "current_code": current_code,
+        "user_question": user_question,
+        "history": history,
+        "memory": memory
+    })
+
+    return response
 
 # --- 过渡层响应生成器 (保持不变) ---
 async def generate_transition_response(
