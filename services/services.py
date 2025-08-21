@@ -16,16 +16,17 @@ from .inspiration_service import InspirationService
 SUMMARY_PROPMT = """
 # 你是一个P5.js代码分析专家。
 
-# 你的任务是分析给定的p5.js代码片段，并生成一个简洁的、30字以内的摘要。重点描述代码的功能、目的和整体行为。
+# 你的任务是分析给定的p5.js代码片段，并生成一个简洁的、40字以内的摘要。
+# 重点描述代码的功能和**视觉表现**。
 
 # 任务要求：
-- **只关注代码的功能与目的，避免解释具体语法或细节**。
+- **只关注代码的视觉表现，用最直观地方法描述code，避免解释具体语法或细节**。
 - **绝对不要提到代码语言或代码层级的细节**。
 - **摘要必须清晰、简洁，仅包含功能描述**。
 
 # 返回要求：
 - **摘要内容只能使用中文，严禁使用任何其他语言！**
-- **摘要长度严格限制在30字以内！**
+- **摘要长度严格限制在40字以内！**
 """
 # --- 全局变量定义，用于持有初始化后的服务实例 ---
 # 这些变量将由 initialize_services 函数在应用启动时填充
@@ -44,7 +45,7 @@ class CodeSummarizerService:
             azure_deployment=settings.AZURE_OPENAI_MODEL_NAME,
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
             api_key=settings.AZURE_OPENAI_API_KEY,
-            temperature=0.2
+            temperature=0.7
         )
         print("✅ Azure Chat LLM for Summarizer 已初始化。")
 

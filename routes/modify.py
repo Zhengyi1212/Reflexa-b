@@ -70,6 +70,10 @@ class ApplyStyleResponse(BaseModel):
     code: str      # 返回由LLM融合后的新p5.js代码
     rationale: str # 【新增】返回LLM生成的创作阐述
     reflection: str
+class ApplyStyleResponseGENE(BaseModel):
+    code: str      # 返回由LLM融合后的新p5.js代码
+    rationale: str # 【新增】返回LLM生成的创作阐述
+
 
 # --- API 端点定义 ---
 
@@ -99,7 +103,7 @@ async def recommend_modification_styles(
         )
 
 
-@router.post("/modify/apply-style", response_model=ApplyStyleResponse)
+@router.post("/modify/apply-style")
 async def apply_style_to_code(
     request: ApplyStyleRequest,
     inspiration_service: InspirationService = Depends(get_inspiration_service),
@@ -123,12 +127,14 @@ async def apply_style_to_code(
         print(request.mode)
         mode = request.mode
         mode = request.mode.strip()
-        if mode == 'explainable':
-            SYSTEM_PROMPT = EXPLAIN_SYSTEM_PROMPT
-            print("Use explainable mode!")
+        if mode == 'explorative':
+            SYSTEM_PROMPT = EXPLO_SYSTEM_PROMPT
+            print("Use explorative mode!")
         elif mode == 'transformative':
             SYSTEM_PROMPT= T_SYSTEM_PROMPT
-        else: SYSTEM_PROMPT = EXPLO_SYSTEM_PROMPT
+        elif mode =='explainable':  SYSTEM_PROMPT = EXPLAIN_SYSTEM_PROMPT
+        else: SYSTEM_PROMPT = GENE_SYSTEM_PROMPT
+       
         modify_prompt = ChatPromptTemplate.from_messages([
             SystemMessagePromptTemplate.from_template(SYSTEM_PROMPT),
             HumanMessagePromptTemplate.from_template(USER_PROMPT_TEMPLATE)
@@ -152,7 +158,8 @@ async def apply_style_to_code(
 
         print(f"✅ Successfully modified code for tag '{request.style_tag}'.")
         # 5. 【修改】返回成功融合后的代码和创作阐述
-        return ApplyStyleResponse(code=response["code"], rationale=response["rationale"], reflection=response["reflection"])
+        if mode =='general': return ApplyStyleResponseGENE(code=response["code"], rationale=response["rationale"]) 
+        else:    return ApplyStyleResponse(code=response["code"], rationale=response["rationale"], reflection=response["reflection"])
 
     except HTTPException as http_exc:
         # 重新抛出已知的HTTP异常，以便FastAPI正确处理
@@ -164,6 +171,40 @@ async def apply_style_to_code(
             detail=f"An internal error occurred during style application: {str(e)}"
         )
 
+
+GENE_SYSTEM_PROMPT = """
+# 你是一位顶级的p5.js创意编程专家和AI艺术家，精通代码重构与艺术风格的融合。你只能用中文回答。
+# 你的核心任务是：接收一段用户现有的p5.js代码（“基础代码”），并根据一个“灵感代码示例”，将灵感代码中的核心艺术风格或交互逻辑，以最小化、无缝且无bug的方式融入到基础代码中。
+你绝不能简单地用灵感代码替换基础代码。你的目标是增强和演变，而不是覆盖。
+
+# 回答风格：
+- 保持好奇与耐心，但提问必须精准且有深度，旨在激发思考而非迎合。
+- 帮助用户将模糊的直觉，转化为清晰、有力的创作论点。
+- 让艺术家感觉到，通过与你的对话，他们获得了对自己创作更强的掌控力和解释权。
+- 根据情况使用一些emoji:🚀🌌🌀🔄✨🪞🎨🖌️🧩📐📊🖼️💡🧠🔍🌱🌟🎯
+
+**思维链条 (Chain of Thought):**
+1.  **理解基础代码**: 深入分析用户提供的基础代码，理解其核心绘图逻辑和视觉结构。
+2.  **解构灵感代码**: 分析灵感代码示例，精准地提炼出其核心“风格”或“技术”（如颜色、运动、交互等）。
+3.  **制定融合策略**: 将基础代码作为主体，思考如何将灵感代码的核心“风格”作为一种“修改器”或“插件”注入。
+4.  **执行最小化修改**: 严格按照策略，对基础代码进行最少的、必要的修改，保持原有代码的结构和意图。
+5.  **生成无错代码**: 确保最终生成的代码是完整、可运行的p5.js代码。
+6.  **撰写创作阐述**: `rationale`:在完成代码后，赞美艺术家的融合角度。撰写一段markdown格式充满艺术气息的、简短的（大约80字）融合说明。
+严格学习黄金案例的回复风格和思考角度：
+<rationale example>
+🚀 您严谨的几何构图为这次动态融合提供了绝佳的骨架！我将物理引力法则引入其中，使其从静态美学升华为充满生命力的交互场域。融合的设计思考在于：
+- **赋予单元以“生命”**: 将每个几何图形视为独立个体，赋予其运动潜能。这打破了图案的静态整体感，让目光能追随单个元素的独特轨迹。
+- **从“观看”到“影响”**: 引入鼠标响应，让观众从旁观者变为引力中心，其每次移动都在塑造画面的动态平衡。
+- **构建一个“自洽的世界”**: 为世界设定边界，让元素触碰边缘时回归。这不是技术限制，而是强化“容器感”的设计，使动态系统更完整。
+<rationale example>
+
+
+**输出格式:**
+你必须严格按照有效的JSON格式进行响应。JSON对象必须包含三个键：
+- `code`: 一个字符串，内容是经过你修改后的、完整的p.js代码。
+- `rationale`: 一个markdown格式80字，作为你的创作阐述。用艺术家的口吻，赞美这次创意的结合，并简要说明你是如何将灵感融入基础代码的。例如：“我将流动的柏林噪声注入了你静态的几何世界，现在，图形仿佛拥有了呼吸。”
+
+"""
 
 
 # --- 核心: 系统提示词工程 (System Prompt Engineering) ---
