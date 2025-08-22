@@ -164,6 +164,7 @@ async def chat(
         }
         response = await chain.ainvoke(chain_input)
         print(f"✅ [会话: {request.session_id}] 普通聊天响应已生成。")
+        print(response)
         return response
 
     except Exception as e:
